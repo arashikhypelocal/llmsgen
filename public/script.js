@@ -1,5 +1,5 @@
 // ===========================
-// URL → Sitemap → Meta Data → llms.txt
+// URL → Sitemap → Meta Data → llms.txt (grouped by URL folders)
 // ===========================
 
 const siteUrlInput = document.getElementById("siteUrl");
@@ -156,6 +156,56 @@ function extractMetaFromHtml(html, url) {
   };
 }
 
+// ---------- Grouping helpers ----------
+
+/**
+ * Turn "post-category" → "Post Category"
+ */
+function toTitleFromSlug(slug) {
+  if (!slug) return "";
+  return slug
+    .split(/[-_]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+/**
+ * Determine group name based on URL path:
+ *
+ * - If path is "/" or single segment (e.g. "/about-us") → "Page"
+ * - If path has at least two segments:
+ *     domain/folder1/slug            → group = folder1
+ *     domain/folder1/folder2/slug    → group = folder2
+ *   i.e. always use the *last folder* before the slug.
+ */
+function getGroupNameFromUrl(url) {
+  try {
+    const u = new URL(url);
+    let path = u.pathname || "/";
+
+    // Normalize: remove trailing slash except root "/"
+    if (path.length > 1 && path.endsWith("/")) {
+      path = path.slice(0, -1);
+    }
+
+    // Split into segments, ignoring empty ones
+    const segments = path.split("/").filter(Boolean);
+
+    // Root or single slug → "Page"
+    if (segments.length <= 1) {
+      return "Page";
+    }
+
+    // More than one segment: last folder is second-to-last segment
+    const folderSegment = segments[segments.length - 2];
+    const title = toTitleFromSlug(folderSegment);
+    return title || "Page";
+  } catch {
+    return "Page";
+  }
+}
+
 // ---------- UI helpers ----------
 
 function resetResultsUI() {
@@ -203,16 +253,19 @@ function updateMetadataTable() {
 }
 
 /**
- * Build llms.txt content in the format:
+ * Build llms.txt content grouped by URL pattern.
  *
- * ## Pages
+ * Example:
+ * ## Page
  *
- * - [Title](URL): Description
+ * - [Home](https://www.swroofing.ca/): description...
+ *
+ * ## Post
+ *
+ * - [Some Post](https://www.swroofing.ca/post/...): description...
  */
 function buildLlmsTextFromMetadata() {
-  const lines = [];
-  lines.push("## Pages");
-  lines.push(""); // blank line
+  const groups = new Map(); // groupName -> array of bullet lines
 
   for (const row of metadataRows) {
     const url = (row.url || "").trim();
@@ -220,16 +273,48 @@ function buildLlmsTextFromMetadata() {
     const description = (row.meta_description || "").trim();
     if (!url || !title || !description) continue;
 
-    lines.push(`- [${title}](${url}): ${description}`);
+    const groupName = getGroupNameFromUrl(url);
+    const line = `- [${title}](${url}): ${description}`;
+
+    if (!groups.has(groupName)) {
+      groups.set(groupName, []);
+    }
+    groups.get(groupName).push(line);
+  }
+
+  const lines = [];
+
+  if (groups.size === 0) {
+    lines.push("## Page");
+    lines.push("");
+    lines.push("// No complete rows (URL + title + description) found.");
+  } else {
+    // Put "Page" first if it exists, then others in insertion order
+    const orderedGroups = [];
+    if (groups.has("Page")) {
+      orderedGroups.push("Page");
+    }
+    for (const key of groups.keys()) {
+      if (key !== "Page") orderedGroups.push(key);
+    }
+
+    orderedGroups.forEach((groupName, index) => {
+      lines.push(`## ${groupName}`);
+      lines.push("");
+      const groupLines = groups.get(groupName) || [];
+      lines.push(...groupLines);
+      if (index < orderedGroups.length - 1) {
+        lines.push(""); // blank line between groups
+        lines.push("");
+      }
+    });
   }
 
   llmsTextContent = lines.join("\n");
 
   if (llmsPreview) {
     llmsPreview.disabled = false;
-    llmsPreview.value =
-      llmsTextContent ||
-      "## Pages\n\n// No complete rows (URL + title + description) found.";
+    llmsPreview.value = llmsTextContent;
   }
 }
 
@@ -322,7 +407,7 @@ async function runUrlToLlmsFlow() {
     }
   }
 
-  // Build llms.txt content
+  // Build grouped llms.txt content
   buildLlmsTextFromMetadata();
 
   downloadCsvBtn.disabled = metadataRows.length === 0;
@@ -381,8 +466,8 @@ function downloadLlmsTxt() {
   a.href = url;
   a.download = "llms.txt";
   document.body.appendChild(a);
-  a.click();
   document.body.removeChild(a);
+  a.click();
 
   URL.revokeObjectURL(url);
 }
