@@ -2,91 +2,106 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>SEO Tools · URL → Sitemap → llms.txt</title>
+  <title>Transform Web Content for LLM Excellence</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <div class="app-shell">
-    <header class="app-header">
-      <div class="app-header-inner">
-        <div>
-          <h1 class="app-title">SEO Utility Studio</h1>
-          <p class="app-subtitle">
-            Paste a website URL. We’ll find its sitemap, extract meta data, and generate
-            <code class="inline">llms.txt</code> and a metadata CSV.
-          </p>
-        </div>
-        <div class="badge">URL → Sitemap → llms.txt</div>
+  <div class="page">
+    <!-- HERO -->
+    <header class="hero">
+      <div class="hero-inner">
+        <h1 class="hero-title">
+          Transform Web Content for <span class="hero-highlight">LLM Excellence</span>
+        </h1>
+        <p class="hero-subtitle">
+          Generate structured text files from websites effortlessly using our LLMs.txt generator.
+          Perfect for enhancing LLM training, fine-tuning, and inference.
+        </p>
       </div>
     </header>
 
-    <main class="app-main">
-      <section class="card">
+    <!-- MAIN CARD -->
+    <main class="main">
+      <section class="card main-card">
         <div class="card-header">
-          <h2>URL → Sitemap → Meta Data &amp; llms.txt</h2>
-          <p>
-            Enter a site URL (e.g.
-            <code class="inline">https://www.hypelocal.com</code>).
-            The tool will:
-            <br />
-            1) Discover sitemaps<br />
-            2) Crawl URLs<br />
-            3) Extract meta title &amp; description<br />
-            4) Generate a metadata CSV and <code class="inline">llms.txt</code>.
+          <h2 class="card-title">Enter website URL</h2>
+          <p class="card-subtitle">
+            Paste any website URL and we’ll automatically discover its sitemap, extract meta data,
+            and generate an <code class="inline">llms.txt</code> file plus a metadata CSV.
           </p>
         </div>
 
         <div class="card-body">
-          <div class="field">
-            <label for="siteUrl">Site URL</label>
-            <input
-              type="url"
+          <!-- URL input + primary action -->
+          <div class="url-row">
+            <label for="siteUrl" class="sr-only">Website URL</label>
+            <textarea
               id="siteUrl"
-              class="text-input"
-              placeholder="https://www.hypelocal.com"
-            />
-          </div>
+              class="url-input"
+              rows="2"
+              placeholder="Enter the website URL to generate LLM-ready text..."
+            ></textarea>
 
-          <div class="field field-inline">
-            <label for="requestDelay" class="delay-label">
-              Request delay (seconds, optional)
-            </label>
-            <input
-              type="number"
-              id="requestDelay"
-              class="text-input delay-input"
-              min="0"
-              step="0.1"
-              value="0.5"
-            />
-          </div>
-
-          <div class="helper-text">
-            We’ll first look at <code class="inline">/robots.txt</code> for <code class="inline">Sitemap:</code> entries.
-            If none are found, we’ll fall back to <code class="inline">/sitemap.xml</code>.
-            All HTTP requests go through this app’s backend proxy (no CORS issues).
-          </div>
-
-          <div class="buttons">
-            <button class="btn primary" id="runBtn" type="button">
-              Fetch &amp; Generate
+            <button class="btn btn-primary generate-btn" id="runBtn" type="button">
+              ✨ Generate LLMs.txt
             </button>
-            <button class="btn ghost" id="downloadCsvBtn" type="button" disabled>
-              Download Metadata CSV
+          </div>
+
+          <!-- Advanced settings (request delay) -->
+          <details class="advanced">
+            <summary>Advanced options</summary>
+            <div class="advanced-inner">
+              <label for="requestDelay" class="advanced-label">
+                Request delay (seconds between page requests)
+              </label>
+              <input
+                type="number"
+                id="requestDelay"
+                class="advanced-input"
+                min="0"
+                step="0.1"
+                value="0.5"
+              />
+              <p class="advanced-help">
+                A small delay is polite when crawling larger sitemaps. Set to <code class="inline">0</code> for no delay.
+              </p>
+            </div>
+          </details>
+
+          <!-- Status -->
+          <div id="toolStatus" class="status">
+            Idle. Paste a URL and click “Generate LLMs.txt”.
+          </div>
+
+          <!-- Actions for downloads (enabled after run) -->
+          <div class="download-row">
+            <button class="btn btn-outline" id="downloadCsvBtn" type="button" disabled>
+              Download metadata CSV
             </button>
-            <button class="btn ghost" id="downloadLlmsBtn" type="button" disabled>
+            <button class="btn btn-outline" id="downloadLlmsBtn" type="button" disabled>
               Download llms.txt
             </button>
           </div>
+        </div>
+      </section>
 
-          <div id="toolStatus" class="status">
-            Idle. Paste a URL and click “Fetch &amp; Generate”.
-          </div>
+      <!-- RESULTS SECTION -->
+      <section class="results">
+        <div class="results-card">
+          <h3 class="results-title">Preview: llms.txt</h3>
+          <textarea
+            id="llmsPreview"
+            class="results-textarea"
+            placeholder="Once generated, the llms.txt preview will appear here in the ## Pages + bullet format."
+            disabled
+          ></textarea>
+        </div>
 
-          <!-- Metadata preview table -->
+        <div class="results-card">
+          <h3 class="results-title">Preview: Discovered Pages</h3>
           <div class="table-wrapper">
-            <table id="resultTable">
+            <table class="results-table" id="resultTable">
               <thead>
                 <tr>
                   <th>#</th>
@@ -96,27 +111,18 @@
                 </tr>
               </thead>
               <tbody id="resultTableBody">
-                <!-- Rows injected via JS -->
+                <!-- rows injected via script.js -->
               </tbody>
             </table>
-          </div>
-
-          <!-- llms.txt preview -->
-          <div class="field" style="margin-top: 1rem;">
-            <label for="llmsPreview">llms.txt Preview</label>
-            <textarea
-              id="llmsPreview"
-              placeholder="After scraping, the generated llms.txt content will appear here..."
-              disabled
-            ></textarea>
           </div>
         </div>
       </section>
     </main>
 
-    <footer class="app-footer">
+    <footer class="footer">
       <p>
-        Built for SEO &amp; LLM workflows. Everything runs through this Node proxy — no third-party APIs.
+        Built for modern SEO &amp; LLM workflows. All content is processed through your own server —
+        no third-party APIs are called from the browser.
       </p>
     </footer>
   </div>
