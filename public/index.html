@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>SEO Tools · llms.txt & Sitemap Meta Scraper</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="app-header">
+      <div class="app-header-inner">
+        <div>
+          <h1 class="app-title">SEO Utility Studio</h1>
+          <p class="app-subtitle">
+            Generate <code class="inline">llms.txt</code> from CSV and extract meta titles &amp; descriptions directly from a sitemap.
+          </p>
+        </div>
+        <div class="badge">Hypelocal · Tools</div>
+      </div>
+    </header>
+
+    <main class="app-main">
+      <!-- =======================
+           Tool 1: CSV → llms.txt
+           ======================= -->
+      <section class="card">
+        <div class="card-header">
+          <h2>1. llms.txt Generator (from CSV)</h2>
+          <p>
+            Upload a CSV with columns:
+            <code class="inline">URL</code>,
+            <code class="inline">Title</code>,
+            <code class="inline">Meta description</code>, and generate an
+            <code class="inline">llms.txt</code> file.
+          </p>
+        </div>
+
+        <div class="card-body">
+          <div class="field">
+            <label for="csvFile">Choose CSV file</label>
+            <div class="file-input-wrapper">
+              <span class="file-label">Browse…</span>
+              <span class="file-name" id="fileName">No file selected</span>
+              <input type="file" id="csvFile" accept=".csv,text/csv" />
+            </div>
+          </div>
+
+          <div class="field field-inline">
+            <label class="checkbox-label" for="hasHeader">
+              <input type="checkbox" id="hasHeader" checked />
+              <span>First row is a header (URL, Title, Meta description)</span>
+            </label>
+          </div>
+
+          <div class="helper-text">
+            Example output line:<br />
+            <code class="inline">
+              - [Title](URL): Meta description
+            </code>
+          </div>
+
+          <div class="field">
+            <label for="preview">llms.txt Preview</label>
+            <textarea
+              id="preview"
+              placeholder="Upload a CSV file to see the generated llms.txt content..."
+              disabled
+            ></textarea>
+          </div>
+
+          <div class="buttons">
+            <button class="btn primary" id="downloadBtn" disabled>
+              Download llms.txt
+            </button>
+            <button class="btn ghost" id="clearBtn" type="button">
+              Clear
+            </button>
+          </div>
+
+          <div id="status" class="status">No file loaded yet.</div>
+        </div>
+      </section>
+
+      <!-- =======================
+           Tool 2: Sitemap Meta Scraper
+           ======================= -->
+      <section class="card">
+        <div class="card-header">
+          <h2>2. Meta Title &amp; Description Scraper (from Sitemap)</h2>
+          <p>
+            Enter a sitemap URL (supports sitemap indexes and nested sitemaps).
+            The tool will crawl all URLs and extract
+            <code class="inline">&lt;title&gt;</code> and
+            <code class="inline">&lt;meta name=&quot;description&quot;&gt;</code>
+            with Open Graph fallbacks.
+          </p>
+        </div>
+
+        <div class="card-body">
+          <div class="field">
+            <label for="sitemapUrl">Sitemap URL</label>
+            <input
+              type="url"
+              id="sitemapUrl"
+              class="text-input"
+              placeholder="https://www.hypelocal.com/sitemap.xml"
+            />
+          </div>
+
+          <div class="field field-inline">
+            <label for="requestDelay" class="delay-label">
+              Request delay (seconds, optional)
+            </label>
+            <input
+              type="number"
+              id="requestDelay"
+              class="text-input delay-input"
+              min="0"
+              step="0.1"
+              value="0.5"
+            />
+          </div>
+
+          <div class="helper-text">
+            A small delay can be polite for the server. All requests are proxied via this app’s backend to avoid CORS issues.
+          </div>
+
+          <div class="buttons">
+            <button class="btn primary" id="scrapeBtn" type="button">
+              Extract from Sitemap
+            </button>
+            <button class="btn ghost" id="sitemapDownloadBtn" type="button" disabled>
+              Download CSV
+            </button>
+          </div>
+
+          <div id="sitemapStatus" class="status">Idle. Enter a sitemap URL to start.</div>
+
+          <div class="table-wrapper">
+            <table id="sitemapTable">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>URL</th>
+                  <th>Meta Title</th>
+                  <th>Meta Description</th>
+                </tr>
+              </thead>
+              <tbody>
+                <!-- Rows injected via JS -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="app-footer">
+      <p>
+        Built for SEO &amp; LLM workflows. Everything runs locally via this server — data is not sent to third-party APIs.
+      </p>
+    </footer>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
