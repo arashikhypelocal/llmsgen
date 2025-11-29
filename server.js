@@ -20,13 +20,26 @@ app.get("/", (req, res) => {
 // ------------ Proxy endpoint ------------
 // IMPORTANT: Node 18+ is required for global fetch.
 
-const ALLOWED_HOSTS = [
+// Allowed hosts for the proxy. You can override the default list by setting
+// the ALLOWED_HOSTS environment variable to a comma‑separated list. Use "*"
+// to allow any host (not recommended for production).
+const DEFAULT_ALLOWED_HOSTS = [
   "www.hypelocal.com",
   "hypelocal.com",
   "localhost",
-  "127.0.0.1"
-  // Add other domains you trust here if needed.
+  "127.0.0.1",
 ];
+
+function getAllowedHosts() {
+  const envList = process.env.ALLOWED_HOSTS;
+  if (!envList) return DEFAULT_ALLOWED_HOSTS;
+  return envList
+    .split(",")
+    .map((h) => h.trim())
+    .filter(Boolean);
+}
+
+const ALLOWED_HOSTS = getAllowedHosts();
 
 app.get("/proxy", async (req, res) => {
   const targetUrl = req.query.url;
@@ -42,7 +55,8 @@ app.get("/proxy", async (req, res) => {
   }
 
   // Safety: avoid turning this into an open proxy.
-  if (!ALLOWED_HOSTS.includes(urlObj.host)) {
+  const isWildcard = ALLOWED_HOSTS.includes("*");
+  if (!isWildcard && !ALLOWED_HOSTS.includes(urlObj.hostname)) {
     return res.status(403).send("Host not allowed by proxy");
   }
 
