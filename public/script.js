@@ -156,34 +156,6 @@ function extractMetaFromHtml(html, url) {
   };
 }
 
-/**
- * Categorize URL based on its path.
- */
-function categorizeUrl(url) {
-  try {
-    const u = new URL(url);
-    const path = u.pathname.toLowerCase();
-
-    if (path === "/" || path === "") return "Home";
-    if (path.includes("/blog")) return "Blog";
-    if (path.includes("/press")) return "Press / News";
-    if (path.includes("/news")) return "News";
-    if (path.includes("/services")) return "Services";
-    if (path.includes("/service")) return "Services";
-    if (path.includes("/product")) return "Product";
-    if (path.includes("/case")) return "Case Study";
-    if (path.includes("/portfolio")) return "Portfolio";
-    if (path.includes("/reviews") || path.includes("/testimonials")) return "Reviews";
-    if (path.includes("/team")) return "Team";
-    if (path.includes("/about")) return "About";
-    if (path.includes("/contact")) return "Contact";
-    if (path.includes("/pricing")) return "Pricing";
-    return "Other";
-  } catch (e) {
-    return "Other";
-  }
-}
-
 // ---------- UI helpers ----------
 
 function resetResultsUI() {
@@ -216,9 +188,6 @@ function updateMetadataTable() {
     const tdUrl = document.createElement("td");
     tdUrl.textContent = row.url;
 
-    const tdCategory = document.createElement("td");
-    tdCategory.textContent = row.category || "";
-
     const tdTitle = document.createElement("td");
     tdTitle.textContent = row.meta_title;
 
@@ -227,26 +196,14 @@ function updateMetadataTable() {
 
     tr.appendChild(tdIndex);
     tr.appendChild(tdUrl);
-    tr.appendChild(tdCategory);
     tr.appendChild(tdTitle);
     tr.appendChild(tdDesc);
     resultTableBody.appendChild(tr);
   });
 }
 
-/**
- * Build llms.txt content in the format:
- *
- * ## Pages
- *
- * - [Title](URL): Description
- * - [Title](URL): Description
- */
 function buildLlmsTextFromMetadata() {
   const lines = [];
-  lines.push("## Pages");
-  lines.push(""); // blank line
-
   for (const row of metadataRows) {
     const url = (row.url || "").trim();
     const title = (row.meta_title || "").trim();
@@ -255,14 +212,10 @@ function buildLlmsTextFromMetadata() {
 
     lines.push(`- [${title}](${url}): ${description}`);
   }
-
   llmsTextContent = lines.join("\n");
-
   if (llmsPreview) {
     llmsPreview.disabled = false;
-    llmsPreview.value =
-      llmsTextContent ||
-      "## Pages\n\n// No complete rows (URL + title + description) found.";
+    llmsPreview.value = llmsTextContent || "// No complete rows (URL + title + description) found.";
   }
 }
 
@@ -338,18 +291,12 @@ async function runUrlToLlmsFlow() {
     if (html === null) {
       metadataRows.push({
         url,
-        category: categorizeUrl(url),
         meta_title: "",
         meta_description: "",
       });
     } else {
       const meta = extractMetaFromHtml(html, url);
-      metadataRows.push({
-        url,
-        category: categorizeUrl(url),
-        meta_title: meta.meta_title,
-        meta_description: meta.meta_description,
-      });
+      metadataRows.push(meta);
     }
 
     count++;
@@ -375,8 +322,8 @@ async function runUrlToLlmsFlow() {
 function downloadMetadataCSV() {
   if (!metadataRows.length) return;
 
-  // Include category in CSV
-  const header = ["url", "category", "meta_title", "meta_description"];
+  // Match your Python-style headers
+  const header = ["url", "meta_title", "meta_description"];
 
   const escapeCSV = (value) => {
     if (value === null || value === undefined) return "";
@@ -401,7 +348,7 @@ function downloadMetadataCSV() {
 
   const a = document.createElement("a");
   a.href = url;
-  a.download = "meta_from_sitemap_with_categories.csv";
+  a.download = "meta_from_sitemap.csv";
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
