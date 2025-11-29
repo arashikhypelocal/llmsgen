@@ -11,13 +11,13 @@
     <header class="app-header">
       <div class="app-header-inner">
         <div>
-          <h1 class="app-title">LLMs Gen</h1>
+          <h1 class="app-title">SEO Utility Studio</h1>
           <p class="app-subtitle">
-            Paste a website URL. We’ll find its sitemap, extract meta data, and generate
-            <code class="inline">llms.txt</code> and a metadata CSV.
+            Paste a website URL. We’ll find its sitemap, extract meta data, categorize URLs, and generate
+            <code class="inline">llms.txt</code> plus a metadata CSV.
           </p>
         </div>
-        <div class="badge">URL → Sitemap → llms.txt</div>
+        <div class="badge">URL → Sitemap → Categories → llms.txt</div>
       </div>
     </header>
 
@@ -33,7 +33,8 @@
             1) Discover sitemaps<br />
             2) Crawl URLs<br />
             3) Extract meta title &amp; description<br />
-            4) Generate a metadata CSV and <code class="inline">llms.txt</code>.
+            4) Auto-categorize URLs by path<br />
+            5) Generate a metadata CSV and <code class="inline">llms.txt</code> in your requested format.
           </p>
         </div>
 
@@ -91,6 +92,7 @@
                 <tr>
                   <th>#</th>
                   <th>URL</th>
+                  <th>Category</th>
                   <th>Meta Title</th>
                   <th>Meta Description</th>
                 </tr>
@@ -106,7 +108,7 @@
             <label for="llmsPreview">llms.txt Preview</label>
             <textarea
               id="llmsPreview"
-              placeholder="After scraping, the generated llms.txt content will appear here..."
+              placeholder="After scraping, the generated llms.txt content will appear here in the ## Pages + bullet format..."
               disabled
             ></textarea>
           </div>
