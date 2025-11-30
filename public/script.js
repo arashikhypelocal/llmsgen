@@ -1,9 +1,11 @@
 // ===========================
 // URL → Sitemap → Meta Data → llms.txt (grouped by URL folders)
+// + Optional FAQ extraction from a user-provided FAQ URL
 // ===========================
 
 const siteUrlInput = document.getElementById("siteUrl");
 const requestDelayInput = document.getElementById("requestDelay");
+const faqUrlInput = document.getElementById("faqUrl");
 const runBtn = document.getElementById("runBtn");
 const toolStatus = document.getElementById("toolStatus");
 const downloadCsvBtn = document.getElementById("downloadCsvBtn");
@@ -15,6 +17,9 @@ const PROXY_ENDPOINT = "/proxy";
 
 let metadataRows = [];
 let llmsTextContent = "";
+
+// Will be filled if FAQ URL is provided and FAQ extraction succeeds
+let faqItems = []; // { question: string, answer: string }[]
 
 // ---------- Helpers: proxy fetch & parsing ----------
 
@@ -156,6 +161,185 @@ function extractMetaFromHtml(html, url) {
   };
 }
 
+// ---------- FAQ helpers ----------
+
+function looksLikeQuestion(text) {
+  const t = (text || "").trim().toLowerCase();
+  if (!t) return false;
+  if (t.includes("?")) return true;
+  const starts = [
+    "what",
+    "how",
+    "why",
+    "when",
+    "where",
+    "who",
+    "does",
+    "do",
+    "can",
+    "is",
+    "are",
+    "should",
+    "will",
+    "could",
+  ];
+  return starts.some((p) => t.startsWith(p + " "));
+}
+
+/**
+ * Extract FAQs based on schema.org FAQPage markup.
+ * Returns list of {question, answer}.
+ */
+function extractFaqSchemaOrg(doc) {
+  const faqs = [];
+  const faqRoots = doc.querySelectorAll('[itemtype="https://schema.org/FAQPage"]');
+  if (!faqRoots.length) return faqs;
+
+  faqRoots.forEach((root) => {
+    const entities =
+      root.querySelectorAll('[itemprop="mainEntity"]') ||
+      root.querySelectorAll('[itemprop="mainEntityOfPage"]');
+
+    entities.forEach((ent) => {
+      const qEl = ent.querySelector('[itemprop="name"]');
+      const aEl = ent.querySelector('[itemprop="text"]');
+      const question = (qEl?.textContent || "").trim();
+      const answer = (aEl?.textContent || "").trim();
+      if (question && answer) {
+        faqs.push({ question, answer });
+      }
+    });
+  });
+
+  return faqs;
+}
+
+/**
+ * Fallback extractor:
+ * - Treat <h2>, <h3>, <h4> as potential questions
+ * - Collect following <p>/<div>/<li> siblings as answer until next heading.
+ */
+function extractFaqHeadings(doc) {
+  const faqs = [];
+  const headings = doc.querySelectorAll("h2, h3, h4");
+
+  headings.forEach((h) => {
+    const qText = (h.textContent || "").trim();
+    if (!looksLikeQuestion(qText)) return;
+
+    const answerParts = [];
+    let sib = h.nextElementSibling;
+    while (sib) {
+      const tag = sib.tagName ? sib.tagName.toLowerCase() : "";
+      if (["h1", "h2", "h3", "h4"].includes(tag)) break;
+
+      if (["p", "div", "li"].includes(tag)) {
+        const text = sib.textContent.trim();
+        if (text) answerParts.push(text);
+      }
+      sib = sib.nextElementSibling;
+    }
+
+    const answer = answerParts.join("\n\n").trim();
+    if (qText && answer) {
+      faqs.push({ question: qText, answer });
+    }
+  });
+
+  return faqs;
+}
+
+/**
+ * Combined FAQ extractor from HTML string.
+ */
+function extractFaqItemsFromHtml(html) {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, "text/html");
+
+  // 1) Schema.org FAQPage
+  let items = extractFaqSchemaOrg(doc);
+  if (items.length) return items;
+
+  // 2) Heading + paragraphs fallback
+  items = extractFaqHeadings(doc);
+  return items;
+}
+
+/**
+ * Append FAQ section to llms.txt output if faqItems exist.
+ * Format:
+ *
+ * Frequently Asked Questions (FAQ)
+ * ==============================
+ * - user question:
+ * ...
+ *
+ * - agent answer:
+ * ...
+ * ---
+ */
+function appendFaqSection(lines) {
+  if (!faqItems || !faqItems.length) return;
+
+  lines.push("");
+  lines.push("Frequently Asked Questions (FAQ)");
+  lines.push("================================");
+  lines.push("");
+
+  faqItems.forEach((item) => {
+    const q = (item.question || "").trim();
+    const a = (item.answer || "").trim();
+    if (!q || !a) return;
+
+    lines.push("- user question:");
+    lines.push(q);
+    lines.push("");
+    lines.push("- agent answer:");
+    lines.push(a);
+    lines.push("");
+    lines.push("---");
+    lines.push("");
+  });
+}
+
+/**
+ * Fetch and extract FAQs from a user-provided FAQ URL.
+ * rawFaqUrl may be absolute or relative; we use origin as base if needed.
+ */
+async function fetchAndExtractFaqFromUrl(rawFaqUrl, origin) {
+  let faqUrl;
+  try {
+    faqUrl = new URL(rawFaqUrl);
+  } catch {
+    try {
+      faqUrl = new URL(rawFaqUrl, origin);
+    } catch {
+      toolStatus.textContent = "Invalid FAQ URL. Skipping FAQ extraction.";
+      toolStatus.classList.add("error");
+      return;
+    }
+  }
+
+  toolStatus.textContent = `Fetching FAQ page: ${faqUrl.href}`;
+  toolStatus.classList.remove("error");
+
+  const html = await fetchUrlGeneric(faqUrl.href, false);
+  if (!html) {
+    toolStatus.textContent = "Could not fetch FAQ page.";
+    toolStatus.classList.add("error");
+    return;
+  }
+
+  const items = extractFaqItemsFromHtml(html);
+  if (!items.length) {
+    toolStatus.textContent = "No FAQs detected on the FAQ page with current heuristics.";
+    return;
+  }
+
+  faqItems = items;
+  toolStatus.textContent = `Found ${faqItems.length} FAQ item(s). They will be appended to llms.txt.`;
+}
+
 // ---------- Grouping helpers ----------
 
 /**
@@ -211,6 +395,8 @@ function getGroupNameFromUrl(url) {
 function resetResultsUI() {
   metadataRows = [];
   llmsTextContent = "";
+  faqItems = [];
+
   downloadCsvBtn.disabled = true;
   downloadLlmsBtn.disabled = true;
 
@@ -253,16 +439,7 @@ function updateMetadataTable() {
 }
 
 /**
- * Build llms.txt content grouped by URL pattern.
- *
- * Example:
- * ## Page
- *
- * - [Home](https://www.swroofing.ca/): description...
- *
- * ## Post
- *
- * - [Some Post](https://www.swroofing.ca/post/...): description...
+ * Build llms.txt content grouped by URL pattern, then append FAQ section.
  */
 function buildLlmsTextFromMetadata() {
   const groups = new Map(); // groupName -> array of bullet lines
@@ -309,6 +486,9 @@ function buildLlmsTextFromMetadata() {
       }
     });
   }
+
+  // Append FAQ section at the bottom (if any)
+  appendFaqSection(lines);
 
   llmsTextContent = lines.join("\n");
 
@@ -407,7 +587,13 @@ async function runUrlToLlmsFlow() {
     }
   }
 
-  // Build grouped llms.txt content
+  // If user provided a FAQ URL, fetch & extract FAQs now
+  const rawFaqUrl = faqUrlInput ? faqUrlInput.value.trim() : "";
+  if (rawFaqUrl) {
+    await fetchAndExtractFaqFromUrl(rawFaqUrl, origin);
+  }
+
+  // Build grouped llms.txt content (with FAQ section if any)
   buildLlmsTextFromMetadata();
 
   downloadCsvBtn.disabled = metadataRows.length === 0;
