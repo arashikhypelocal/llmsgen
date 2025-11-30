@@ -284,6 +284,10 @@ body {
   font-size: 0.8rem;
   color: var(--text-muted);
 }
+.advanced-input-wide {
+  width: 100%;
+  margin-top: 0.25rem;
+}
 
 /* Status + downloads */
 
