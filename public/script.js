@@ -161,7 +161,7 @@ function extractMetaFromHtml(html, url) {
   };
 }
 
-// ---------- FAQ helpers ----------
+// ---------- FAQ helpers (schema.org + fallback) ----------
 
 function looksLikeQuestion(text) {
   const t = (text || "").trim().toLowerCase();
@@ -187,10 +187,11 @@ function looksLikeQuestion(text) {
 }
 
 /**
- * Extract FAQs based on schema.org FAQPage markup.
+ * Extract FAQs based on schema.org FAQPage microdata markup.
+ * Looks for itemtype="https://schema.org/FAQPage".
  * Returns list of {question, answer}.
  */
-function extractFaqSchemaOrg(doc) {
+function extractFaqSchemaMicrodata(doc) {
   const faqs = [];
   const faqRoots = doc.querySelectorAll('[itemtype="https://schema.org/FAQPage"]');
   if (!faqRoots.length) return faqs;
@@ -215,9 +216,119 @@ function extractFaqSchemaOrg(doc) {
 }
 
 /**
+ * Helper to walk parsed JSON-LD object and collect FAQ Q/A pairs.
+ */
+function extractFaqsFromLdJsonObject(obj) {
+  const faqs = [];
+
+  function handleQuestion(qObj) {
+    if (!qObj || typeof qObj !== "object") return;
+    const qText = (qObj.name || qObj.headline || "").toString();
+    const aPart = qObj.acceptedAnswer || qObj.acceptedAnswers || qObj.suggestedAnswer;
+
+    const answers = [];
+    if (Array.isArray(aPart)) {
+      answers.push(...aPart);
+    } else if (aPart) {
+      answers.push(aPart);
+    }
+
+    answers.forEach((ansObj) => {
+      if (!ansObj || typeof ansObj !== "object") return;
+      const aText = (ansObj.text || ansObj.description || "").toString();
+      if (qText && aText) {
+        faqs.push({
+          question: qText.trim(),
+          answer: aText.trim(),
+        });
+      }
+    });
+  }
+
+  function nodeHasType(node, typeSubstring) {
+    const t = node["@type"] || node.type;
+    if (!t) return false;
+    if (Array.isArray(t)) {
+      return t.some((v) =>
+        String(v).toLowerCase().includes(typeSubstring.toLowerCase())
+      );
+    }
+    return String(t).toLowerCase().includes(typeSubstring.toLowerCase());
+  }
+
+  function walk(node) {
+    if (!node) return;
+
+    if (Array.isArray(node)) {
+      node.forEach((item) => walk(item));
+      return;
+    }
+
+    if (typeof node === "object") {
+      if (nodeHasType(node, "faqpage")) {
+        const entities =
+          node.mainEntity || node.mainEntityOfPage || node.mainEntityOfPageList;
+        if (entities) {
+          const list = Array.isArray(entities) ? entities : [entities];
+          list.forEach((ent) => {
+            if (nodeHasType(ent, "question")) {
+              handleQuestion(ent);
+            }
+          });
+        }
+      } else if (nodeHasType(node, "question")) {
+        handleQuestion(node);
+      }
+
+      Object.values(node).forEach((v) => walk(v));
+    }
+  }
+
+  walk(obj);
+  return faqs;
+}
+
+/**
+ * Extract FAQs based on schema.org FAQPage JSON-LD.
+ * Returns list of {question, answer}.
+ */
+function extractFaqSchemaLdJson(doc) {
+  const faqs = [];
+  const scripts = doc.querySelectorAll('script[type="application/ld+json"]');
+
+  scripts.forEach((script) => {
+    const raw = script.textContent || "";
+    if (!raw.trim()) return;
+
+    try {
+      const data = JSON.parse(raw);
+      const items = extractFaqsFromLdJsonObject(data);
+      if (items && items.length) {
+        faqs.push(...items);
+      }
+    } catch (e) {
+      // ignore JSON parse errors
+    }
+  });
+
+  // dedupe by question+answer
+  const seen = new Set();
+  const unique = [];
+  faqs.forEach((item) => {
+    const key = `${item.question}|||${item.answer}`;
+    if (!seen.has(key)) {
+      seen.add(key);
+      unique.push(item);
+    }
+  });
+  return unique;
+}
+
+/**
  * Fallback extractor:
  * - Treat <h2>, <h3>, <h4> as potential questions
- * - Collect following <p>/<div>/<li> siblings as answer until next heading.
+ * - Collect following siblings (DOM order) until next heading (h1–h4)
+ * - Aggregate text from p/div/li/section/article and text nodes
  */
 function extractFaqHeadings(doc) {
   const faqs = [];
@@ -228,20 +339,29 @@ function extractFaqHeadings(doc) {
     if (!looksLikeQuestion(qText)) return;
 
     const answerParts = [];
-    let sib = h.nextElementSibling;
-    while (sib) {
-      const tag = sib.tagName ? sib.tagName.toLowerCase() : "";
-      if (["h1", "h2", "h3", "h4"].includes(tag)) break;
+    let node = h.nextSibling;
 
-      if (["p", "div", "li"].includes(tag)) {
-        const text = sib.textContent.trim();
+    while (node) {
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        const tag = node.tagName ? node.tagName.toLowerCase() : "";
+
+        // Stop at next heading
+        if (["h1", "h2", "h3", "h4"].includes(tag)) break;
+
+        if (["p", "div", "li", "section", "article"].includes(tag)) {
+          const text = node.textContent.trim();
+          if (text) answerParts.push(text);
+        }
+      } else if (node.nodeType === Node.TEXT_NODE) {
+        const text = node.textContent.trim();
         if (text) answerParts.push(text);
       }
-      sib = sib.nextElementSibling;
+
+      node = node.nextSibling;
     }
 
     const answer = answerParts.join("\n\n").trim();
-    if (qText && answer) {
+    if (answer) {
       faqs.push({ question: qText, answer });
     }
   });
@@ -250,18 +370,32 @@ function extractFaqHeadings(doc) {
 }
 
 /**
- * Combined FAQ extractor from HTML string.
+ * Combined FAQ extractor from HTML string:
+ * 1) schema.org microdata
+ * 2) schema.org JSON-LD
+ * 3) heading-based fallback
  */
 function extractFaqItemsFromHtml(html) {
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, "text/html");
 
-  // 1) Schema.org FAQPage
-  let items = extractFaqSchemaOrg(doc);
-  if (items.length) return items;
+  // 1) schema.org microdata
+  let items = extractFaqSchemaMicrodata(doc);
+  if (items.length) {
+    console.log("FAQ: found", items.length, "items via schema.org microdata");
+    return items;
+  }
 
-  // 2) Heading + paragraphs fallback
+  // 2) JSON-LD schema
+  items = extractFaqSchemaLdJson(doc);
+  if (items.length) {
+    console.log("FAQ: found", items.length, "items via JSON-LD schema.org");
+    return items;
+  }
+
+  // 3) fallback: heading-based
   items = extractFaqHeadings(doc);
+  console.log("FAQ: found", items.length, "items via heading-based heuristic");
   return items;
 }
 
@@ -332,7 +466,8 @@ async function fetchAndExtractFaqFromUrl(rawFaqUrl, origin) {
 
   const items = extractFaqItemsFromHtml(html);
   if (!items.length) {
-    toolStatus.textContent = "No FAQs detected on the FAQ page with current heuristics.";
+    toolStatus.textContent =
+      "No FAQs detected on the FAQ page with current heuristics.";
     return;
   }
 
@@ -652,8 +787,8 @@ function downloadLlmsTxt() {
   a.href = url;
   a.download = "llms.txt";
   document.body.appendChild(a);
-  document.body.removeChild(a);
   a.click();
+  document.body.removeChild(a);
 
   URL.revokeObjectURL(url);
 }
