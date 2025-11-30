@@ -48,9 +48,10 @@
             </button>
           </div>
 
-          <!-- Advanced settings (request delay) -->
+          <!-- Advanced settings (request delay + FAQ URL) -->
           <details class="advanced">
             <summary>Advanced options</summary>
+
             <div class="advanced-inner">
               <label for="requestDelay" class="advanced-label">
                 Request delay (seconds between page requests)
@@ -65,6 +66,23 @@
               />
               <p class="advanced-help">
                 A small delay is polite when crawling larger sitemaps. Set to <code class="inline">0</code> for no delay.
+              </p>
+            </div>
+
+            <!-- NEW: FAQ URL input -->
+            <div class="advanced-inner">
+              <label for="faqUrl" class="advanced-label">
+                FAQ page URL (optional)
+              </label>
+              <input
+                type="text"
+                id="faqUrl"
+                class="advanced-input advanced-input-wide"
+                placeholder="https://example.com/faq"
+              />
+              <p class="advanced-help">
+                If provided, we’ll fetch this page, extract FAQs, and append them to the bottom of
+                the generated <code class="inline">llms.txt</code> in the FAQ format.
               </p>
             </div>
           </details>
