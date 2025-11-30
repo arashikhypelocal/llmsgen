@@ -16,10 +16,6 @@ const PROXY_ENDPOINT = "/proxy";
 let metadataRows = [];
 let llmsTextContent = "";
 
-// NEW: store extracted FAQs from the FAQ page
-// Shape: { question: string, answer: string }[]
-let faqItems = [];
-
 // ---------- Helpers: proxy fetch & parsing ----------
 
 /**
@@ -160,108 +156,6 @@ function extractMetaFromHtml(html, url) {
   };
 }
 
-// ---------- FAQ helpers ----------
-
-/**
- * Heuristic to decide if a page looks like an FAQ page.
- */
-function isFaqPage(url, metaTitle) {
-  const u = (url || "").toLowerCase();
-  const t = (metaTitle || "").toLowerCase();
-
-  if (u.includes("/faq") || u.endsWith("faq") || u.includes("/faqs")) {
-    return true;
-  }
-  if (t.includes("faq") || t.includes("frequently asked questions")) {
-    return true;
-  }
-  return false;
-}
-
-/**
- * Given raw HTML, try to extract FAQ items as { question, answer }.
- * This is a generic extractor; you can tweak selectors for your actual FAQ structure.
- */
-function extractFaqItemsFromHtml(html) {
-  const items = [];
-
-  try {
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(html, "text/html");
-
-    // 1) schema.org FAQPage pattern, if present
-    const faqRoot =
-      doc.querySelector('[itemtype="https://schema.org/FAQPage"]') ||
-      doc.querySelector('[data-faq-root]');
-
-    if (faqRoot) {
-      const entities = faqRoot.querySelectorAll('[itemprop="mainEntity"]');
-      entities.forEach((entity) => {
-        const qEl = entity.querySelector('[itemprop="name"]');
-        const aEl = entity.querySelector('[itemprop="text"]');
-        const question = qEl?.textContent?.trim();
-        const answer = aEl?.textContent?.trim();
-        if (question && answer) {
-          items.push({ question, answer });
-        }
-      });
-    }
-
-    // 2) Fallback: headings + following paragraphs
-    if (!items.length) {
-      const headings = doc.querySelectorAll("h2, h3, h4");
-      headings.forEach((h) => {
-        const qText = h.textContent?.trim() || "";
-        if (!qText) return;
-        if (!/(\?|faq|frequently asked)/i.test(qText)) return;
-
-        let sib = h.nextElementSibling;
-        const answerParts = [];
-        while (sib && sib.tagName && sib.tagName.toLowerCase() === "p") {
-          answerParts.push(sib.textContent.trim());
-          sib = sib.nextElementSibling;
-        }
-        const aText = answerParts.join("\n\n").trim();
-        if (aText) {
-          items.push({ question: qText, answer: aText });
-        }
-      });
-    }
-  } catch (e) {
-    console.error("FAQ parse error:", e);
-  }
-
-  return items;
-}
-
-/**
- * Append FAQ section to llms.txt output if faqItems exist.
- * Uses the exact format you specified.
- */
-function appendFaqSection(lines) {
-  if (!faqItems || !faqItems.length) return;
-
-  lines.push("");
-  lines.push("Frequently Asked Questions (FAQ)");
-  lines.push("================================");
-  lines.push("");
-
-  faqItems.forEach((item) => {
-    const q = (item.question || "").trim();
-    const a = (item.answer || "").trim();
-    if (!q || !a) return;
-
-    lines.push("- user question:");
-    lines.push(q);
-    lines.push("");
-    lines.push("- agent answer:");
-    lines.push(a);
-    lines.push("");
-    lines.push("---");
-    lines.push("");
-  });
-}
-
 // ---------- Grouping helpers ----------
 
 /**
@@ -317,8 +211,6 @@ function getGroupNameFromUrl(url) {
 function resetResultsUI() {
   metadataRows = [];
   llmsTextContent = "";
-  faqItems = []; // reset FAQ items when starting a new run
-
   downloadCsvBtn.disabled = true;
   downloadLlmsBtn.disabled = true;
 
@@ -361,7 +253,7 @@ function updateMetadataTable() {
 }
 
 /**
- * Build llms.txt content grouped by URL pattern, then append FAQ section.
+ * Build llms.txt content grouped by URL pattern.
  *
  * Example:
  * ## Page
@@ -371,8 +263,6 @@ function updateMetadataTable() {
  * ## Post
  *
  * - [Some Post](https://www.swroofing.ca/post/...): description...
- *
- * ... then FAQ section at the bottom.
  */
 function buildLlmsTextFromMetadata() {
   const groups = new Map(); // groupName -> array of bullet lines
@@ -419,9 +309,6 @@ function buildLlmsTextFromMetadata() {
       }
     });
   }
-
-  // NEW: append FAQ section at the bottom (if any)
-  appendFaqSection(lines);
 
   llmsTextContent = lines.join("\n");
 
@@ -496,7 +383,7 @@ async function runUrlToLlmsFlow() {
     }
   }
 
-  // Scrape each page for meta (and FAQ if applicable)
+  // Scrape each page for meta
   let count = 0;
   for (const url of allUrls) {
     const html = await fetchUrlGeneric(url, false);
@@ -509,15 +396,6 @@ async function runUrlToLlmsFlow() {
     } else {
       const meta = extractMetaFromHtml(html, url);
       metadataRows.push(meta);
-
-      // NEW: detect FAQ page and extract FAQs
-      if (isFaqPage(url, meta.meta_title)) {
-        const items = extractFaqItemsFromHtml(html);
-        if (items && items.length) {
-          faqItems = items; // assuming a single FAQ page; merge if you have multiple
-          console.log("FAQ items detected from", url, items);
-        }
-      }
     }
 
     count++;
@@ -529,7 +407,7 @@ async function runUrlToLlmsFlow() {
     }
   }
 
-  // Build grouped llms.txt content (with FAQ section)
+  // Build grouped llms.txt content
   buildLlmsTextFromMetadata();
 
   downloadCsvBtn.disabled = metadataRows.length === 0;
